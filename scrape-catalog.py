@@ -1,8 +1,9 @@
-from scraping import scrape_products
 import json
 import sys
+from multiprocessing import Pool
 from pathlib import Path
 
+from scraping import scrape_products
 
 link_templates = {
     # "theforge": "https://theforgecville.crystalcommerce.com/catalog/magic_the_gathering_singles-2025_expansion_sets-final_fantasy/16646?filter_by_stock=in-stock&page={page}&sort_by_price=1",
@@ -18,12 +19,16 @@ if not SCRAPE:
     sys.exit(0)
 
 
-out_dir = Path("./out")
-out_dir.mkdir(exist_ok=True)
-
-for store, link_template in link_templates.items():
-    print(f"Scraping {store}...")
+def _scrape_catalog(store_link_info: tuple[str, str]) -> None:
+    store, link_template = store_link_info
+    products = [p._asdict() for p in scrape_products(store, link_template)]
     with (out_dir / f"{store}.json").open("w") as f:
-        json.dump(
-            [p._asdict() for p in scrape_products(store, link_template)], f, indent=2
-        )
+        json.dump(products, f, indent=2)
+
+
+if __name__ == "__main__":
+    out_dir = Path("./out")
+    out_dir.mkdir(exist_ok=True)
+
+    with Pool(len(link_templates)) as pool:
+        pool.map(_scrape_catalog, link_templates.items())
