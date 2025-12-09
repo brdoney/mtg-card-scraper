@@ -1,5 +1,4 @@
-from typing import cast
-from typing import NamedTuple
+from typing import NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
 
 import requests
@@ -19,7 +18,10 @@ class Product(NamedTuple):
 
 
 def scrape_products(
-    store_name: str, link_template: str, search_string: str | None = None
+    store_name: str,
+    link_template: str,
+    search_string: str | None = None,
+    output: bool = True,
 ) -> list[Product]:
     base_link = urlparse(link_template)._replace(
         path="", params="", query="", fragment=""
@@ -32,11 +34,14 @@ def scrape_products(
     includes_search_string = True
     search_string = search_string.lower() if search_string is not None else None
 
-    while has_products and includes_search_string:
-        print(f"  Page {page_number}...")
-        link = link_template.format(page=page_number)
-        response = requests.get(link)
+    session = requests.Session()
 
+    while has_products and includes_search_string:
+        if output:
+            print(f"  Page {page_number}...")
+        link = link_template.format(page=page_number)
+
+        response = session.get(link)
         soup = BeautifulSoup(response.text, "html.parser")
 
         if soup.select("p.no-product"):
