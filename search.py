@@ -35,7 +35,7 @@ if __name__ == "__main__":
         products = list(itertools.chain(*items))
 
     out = Path("./out/search")
-    out.mkdir(exist_ok=True)
+    out.mkdir(exist_ok=True, parents=True)
 
     dest = out / f"{hash(search_text_encoded)}.json"
     with dest.open("w") as f:
