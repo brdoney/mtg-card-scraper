@@ -4,6 +4,7 @@ Search for Magic the Gathering cards at local game shops, compare prices, and mo
 
 ## Dependencies
 
+- [kitty](https://github.com/kovidgoyal/kitty) terminal, for displaying card preview images
 - [fzf](https://github.com/junegunn/fzf) - for any script that searches for cards
 - `requests` - for downloading pages
 - `beautifulsoup4` - for scraping the webpages
@@ -12,5 +13,5 @@ Search for Magic the Gathering cards at local game shops, compare prices, and mo
 
 ```
 $ pip install requests beautifulsoup4
-$ brew install fzf
+$ brew install fzf jq
 ```
