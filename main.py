@@ -1,12 +1,57 @@
+import asyncio
+import hashlib
 import json
+import webbrowser
+from io import BytesIO
+from pathlib import Path
 from typing import Any
 
+import aiofiles
+import aiohttp
+import PIL.Image
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import DataTable, Footer, Header
+from textual.containers import Container, VerticalGroup
+from textual.reactive import reactive
+from textual.widgets import DataTable, Footer, Header, Static
+from textual_image.widget import Image
+
+IMAGE_CACHE_PATH = Path("~/.cache/mtg-card-images/").expanduser()
+IMAGE_CACHE_PATH.mkdir(parents=True, exist_ok=True)
 
 
-class SearchResult(DataTable):
+async def save_image(path: Path, data: bytes) -> None:
+    async with aiofiles.open(path, "wb") as f:
+        await f.write(data)
+
+
+async def get_image_path(url: str) -> PIL.Image.Image:
+    md5 = hashlib.md5(url.encode()).hexdigest()
+    path = IMAGE_CACHE_PATH / md5
+
+    # Check the cache if we've already downloaded it
+    if path.exists():
+        # return PIL.Image.open(path)
+        return PIL.Image.open(path)
+
+    print("Downloading")
+    # Otherwise, download it
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as res:
+            data = await res.read()
+
+            # Create a background task to save the image for the future
+            asyncio.create_task(save_image(path, data))
+
+            img = PIL.Image.open(BytesIO(data))
+            img.load()
+
+            return img
+
+    # fname="$HOME/.cache/mtg-card-images/$(echo "$url" | md5sum | cut -d" " -f1).png";
+
+
+class SearchResults(DataTable):
     COLUMNS = {"name", "attributes", "store", "stock", "price", "description"}
 
     BINDINGS = [
@@ -33,11 +78,11 @@ class SearchResult(DataTable):
 
     data: list[dict[str, Any]]
 
-    def __init__(self, file_path: str) -> None:
+    def __init__(self, file_path: str, *args, **kwargs) -> None:
         with open(file_path) as f:
             self.data = json.load(f)
 
-        super().__init__(cursor_type="row", zebra_stripes=True)
+        super().__init__(cursor_type="row", zebra_stripes=True, *args, **kwargs)
 
     def on_mount(self) -> None:
         if len(self.data) == 0:
@@ -51,12 +96,54 @@ class SearchResult(DataTable):
             if col not in self.COLUMNS:
                 self.remove_column(column_keys[i])
 
-    def on_data_table_row_highlighted(self, msg: DataTable.RowHighlighted) -> None:
-        print(msg.cursor_row)
+
+class CardDetails(VerticalGroup):
+    data: reactive[dict[str, Any] | None] = reactive(None)
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(
+            Static(id="card-details-text"),
+            Image(id="card-image"),
+            *args,
+            **kwargs,
+        )
+
+    async def watch_data(self, new_data: dict[str, Any] | None) -> None:
+        if new_data is None:
+            return
+
+        img = self.query_one(Image)
+        img.image = await get_image_path(new_data["img_src"])
+
+        s = "\n".join(str(v) for k, v in new_data.items() if k in SearchResults.COLUMNS)
+        self.query_one(Static).update(s)
+
+
+class SearchView(Container):
+    def __init__(self) -> None:
+        super().__init__(
+            SearchResults("./out/search/3141209881939731343.json"),
+            CardDetails(id="card-details"),
+        )
+
+    async def on_data_table_row_highlighted(
+        self, _msg: DataTable.RowHighlighted
+    ) -> None:
+        grid = self.query_one(SearchResults)
+        self.query_one(CardDetails).data = grid.data[grid.cursor_row]
+
+    def on_data_table_row_selected(self, _msg: DataTable.RowSelected) -> None:
+        grid = self.query_one(SearchResults)
+        selected = grid.data[grid.cursor_row]
+
+        image_url = selected["dest"]
+        webbrowser.open(image_url)
 
 
 class MTGSearchApp(App):
     """TUI to coordinate searching and scraping (instead of using fzf)"""
+
+    CSS_PATH = "mtg-search.tcss"
 
     COMMAND_PALETTE_BINDING = "ctrl+slash"
 
@@ -66,7 +153,7 @@ class MTGSearchApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield SearchResult("./out/search/3141209881939731343.json")
+        yield SearchView()
         yield Footer()
 
 
