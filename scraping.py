@@ -20,7 +20,7 @@ class Product(NamedTuple):
         return Product(**d)
 
     def rich_text(self) -> str:
-        return f"[b cyan]{self.name}[/b cyan]\n{self.attributes}\n[i]{self.store}[/i]\nQty: {self.stock}\n${self.price:.02f}\n[gray]{self.description}[/gray]"
+        return f"[b cyan]{self.name}[/b cyan]\n{self.attributes}\n[i]{self.store}[/i]\nQty: {self.stock}\n[b]${self.price:.02f}[/b]\n[gray]{self.description}[/gray]"
 
 
 async def scrape_products(

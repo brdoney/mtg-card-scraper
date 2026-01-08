@@ -13,3 +13,6 @@
   padding: 1;
 }
 
+#search-results {
+  height: 100%;
+}

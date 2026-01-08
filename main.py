@@ -11,6 +11,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, VerticalGroup
+from textual.fuzzy import FuzzySearch
 from textual.reactive import reactive
 from textual.widgets import DataTable, Footer, Header, Input, Label
 from textual_image.widget import Image
@@ -78,24 +79,41 @@ class SearchResults(DataTable):
         Binding("end", "scroll_end", "End", show=False),
     ]
 
+    search_text: reactive[str] = reactive("")
     data: reactive[list[Product]] = reactive([])
+    filtered: list[Product] = []
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(cursor_type="row", zebra_stripes=True, *args, **kwargs)
 
     def watch_data(self) -> None:
+        self.clear(columns=True)
+        self.filtered = []
+
         if len(self.data) == 0:
             return
 
-        self.clear(columns=True)
+        fuzzy = FuzzySearch()
+
+        def fuzzy_sort_name(p: Product) -> tuple[float, float]:
+            val = fuzzy.match(self.search_text, p.name)
+            print(p.name, val)
+            return (val[0], -p.price)
 
         cols = Product._fields
-        column_keys = self.add_columns(*cols)
-        self.add_rows(self.data)
+        column_keys = self.add_columns(*zip(cols, cols))
+
+        fuzzy_lookup = {p: fuzzy.match(self.search_text, p.name)[0] for p in self.data}
+        self.filtered = [p for p in self.data if fuzzy_lookup[p] > 0.1]
+        self.filtered.sort(key=lambda p: (fuzzy_lookup[p], -p.price), reverse=True)
+        self.add_rows(self.filtered)
 
         for i, col in enumerate(cols):
             if col not in self.COLUMNS:
                 self.remove_column(column_keys[i])
+
+    def get_highlighted_product(self) -> Product:
+        return self.filtered[self.cursor_row]
 
 
 class CardDetails(VerticalGroup):
@@ -124,16 +142,23 @@ class SearchView(Container):
     def __init__(self) -> None:
         super().__init__(
             Input(placeholder="Search Cards..."),
-            SearchResults(),
+            SearchResults(id="search-results"),
             CardDetails(id="card-details"),
         )
 
     @work(exclusive=True)
     async def search_for_card(self, search_text: str) -> None:
-        print("Searching...")
+        search_results = self.query_one(SearchResults)
+        card_details = self.query_one(CardDetails)
+
+        card_details.loading = True
+
+        search_results.search_text = search_text
+        search_results.data = []
         data, dest = await search_card(search_text)
-        print(f"Finished search... {data}")
-        self.query_one(SearchResults).data = data
+        search_results.data = data
+
+        card_details.loading = False
 
     async def on_input_submitted(self, msg: Input.Submitted) -> None:
         self.search_for_card(msg.value)
@@ -142,11 +167,11 @@ class SearchView(Container):
         self, _msg: DataTable.RowHighlighted
     ) -> None:
         grid = self.query_one(SearchResults)
-        self.query_one(CardDetails).data = grid.data[grid.cursor_row]
+        self.query_one(CardDetails).data = grid.get_highlighted_product()
 
     def on_data_table_row_selected(self, _msg: DataTable.RowSelected) -> None:
         grid = self.query_one(SearchResults)
-        selected = grid.data[grid.cursor_row]
+        selected = grid.get_highlighted_product()
         webbrowser.open(selected.dest)
 
 
