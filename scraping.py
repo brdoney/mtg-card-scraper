@@ -1,3 +1,4 @@
+from typing import Any
 from typing import NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
 
@@ -15,6 +16,12 @@ class Product(NamedTuple):
     img_medium_src: str
     img_src: str
     dest: str
+
+    def from_dict(d: dict[str, Any]) -> "Product":
+        return Product(**d)
+
+    def rich_text(self) -> str:
+        return f"[b cyan]{self.name}[/b cyan]\n{self.attributes}\n[i]{self.store}[/i]\nQty: {self.stock}\n${self.price:.02f}\n[gray]{self.description}[/gray]"
 
 
 async def scrape_products(

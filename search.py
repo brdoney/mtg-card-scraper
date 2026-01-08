@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from scraping import Product
 from concurrent.futures.process import ProcessPoolExecutor
 import itertools
 import json
@@ -17,16 +18,14 @@ search_link_formats = {
 }
 
 
-async def _scrape_store(
-    store_link_info: tuple[str, str], text: str
-) -> list[dict[str, Any]]:
+async def _scrape_store(store_link_info: tuple[str, str], text: str) -> list[Product]:
     store, search_link_format = store_link_info
     text_encoded = urllib.parse.quote_plus(text)
     link_format = search_link_format.format(search_text=text_encoded, page="{page}")
-    return [p._asdict() for p in await scrape_products(store, link_format, text, False)]
+    return await scrape_products(store, link_format, text, False)
 
 
-async def search_card(text: str) -> tuple[list[dict[str, Any]], Path]:
+async def search_card(text: str) -> tuple[list[Product], Path]:
     text_encoded = urllib.parse.quote_plus(text)
 
     futures = [_scrape_store(item, text) for item in search_link_formats.items()]
@@ -39,14 +38,14 @@ async def search_card(text: str) -> tuple[list[dict[str, Any]], Path]:
 
     dest = out / f"{hash(text_encoded)}.json"
     with dest.open("w") as f:
-        json.dump(products, f, indent=2)
+        data = [p._asdict() for p in products]
+        json.dump(data, f, indent=2)
 
     return products, dest
 
 
 async def main():
     search_text = sys.argv[1]
-    search_text_encoded = urllib.parse.quote_plus(search_text)
 
     _, dest = await search_card(search_text)
 

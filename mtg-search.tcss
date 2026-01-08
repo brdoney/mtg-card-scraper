@@ -1,0 +1,15 @@
+#card-details {
+  dock: right;
+  width: 33%;
+  height: 100%;
+}
+
+#card-image {
+  width: 100%;
+  height: auto;
+}
+
+#card-details-text {
+  padding: 1;
+}
+

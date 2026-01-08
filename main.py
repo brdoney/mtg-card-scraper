@@ -1,9 +1,9 @@
+from scraping import Product
 import asyncio
 import hashlib
 import webbrowser
 from io import BytesIO
 from pathlib import Path
-from typing import Any
 
 import aiofiles
 import aiohttp
@@ -13,7 +13,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, VerticalGroup
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Input, Static
+from textual.widgets import DataTable, Footer, Header, Input, Label
 from textual_image.widget import Image
 
 from search import search_card
@@ -78,21 +78,20 @@ class SearchResults(DataTable):
         Binding("end", "scroll_end", "End", show=False),
     ]
 
-    data: reactive[list[dict[str, Any]]] = reactive([])
+    data: reactive[list[Product]] = reactive([])
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(cursor_type="row", zebra_stripes=True, *args, **kwargs)
 
     def watch_data(self) -> None:
-        print(f"Updating data... {self.data} {len(self.data)}")
         if len(self.data) == 0:
             return
 
         self.clear(columns=True)
 
-        cols = self.data[0].keys()
+        cols = Product._fields
         column_keys = self.add_columns(*cols)
-        self.add_rows((row.values() for row in self.data))
+        self.add_rows(self.data)
 
         for i, col in enumerate(cols):
             if col not in self.COLUMNS:
@@ -100,25 +99,24 @@ class SearchResults(DataTable):
 
 
 class CardDetails(VerticalGroup):
-    data: reactive[dict[str, Any] | None] = reactive(None)
+    data: reactive[Product | None] = reactive(None)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(
-            Static(id="card-details-text"),
+            Label(id="card-details-text"),
             Image(id="card-image"),
             *args,
             **kwargs,
         )
 
-    async def watch_data(self, new_data: dict[str, Any] | None) -> None:
+    async def watch_data(self, new_data: Product | None) -> None:
         if new_data is None:
             return
 
         img = self.query_one(Image)
-        img.image = await get_image_path(new_data["img_src"])
+        img.image = await get_image_path(new_data.img_src)
 
-        s = "\n".join(str(v) for k, v in new_data.items() if k in SearchResults.COLUMNS)
-        self.query_one(Static).update(s)
+        self.query_one(Label).update(new_data.rich_text())
 
 
 class SearchView(Container):
@@ -148,9 +146,7 @@ class SearchView(Container):
     def on_data_table_row_selected(self, _msg: DataTable.RowSelected) -> None:
         grid = self.query_one(SearchResults)
         selected = grid.data[grid.cursor_row]
-
-        image_url = selected["dest"]
-        webbrowser.open(image_url)
+        webbrowser.open(selected.dest)
 
 
 class MTGSearchApp(App):
