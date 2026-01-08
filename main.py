@@ -1,3 +1,8 @@
+from textual.suggester import SuggestFromList
+from textual.containers import Middle
+from textual.containers import Center
+from textual.screen import Screen
+from card_names import update_cache
 import asyncio
 import hashlib
 import webbrowser
@@ -13,7 +18,7 @@ from textual.binding import Binding
 from textual.containers import Container, VerticalGroup
 from textual.fuzzy import FuzzySearch
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Input, Label
+from textual.widgets import DataTable, Footer, Header, Input, Label, ProgressBar
 from textual_image.widget import Image
 
 from scraping import Product
@@ -176,6 +181,50 @@ class SearchView(Container):
         webbrowser.open(selected.dest)
 
 
+class CacheProgress(Screen[list[str]]):
+    download_size: int
+    download_task: asyncio.Task
+    progress_queue: asyncio.Queue
+
+    def __init__(
+        self,
+        download_size: int,
+        download_task: asyncio.Task,
+        progress_queue: asyncio.Queue,
+        *args,
+        **kwargs,
+    ) -> None:
+        self.download_size = download_size
+        self.download_task = download_task
+        self.progress_queue = progress_queue
+        super().__init__(*args, **kwargs)
+
+    def compose(self) -> ComposeResult:
+        with Center():
+            with Middle():
+                yield Label("[b]Updating card autocomplete cache...[/b]")
+                yield ProgressBar(total=self.download_size)
+
+    def on_mount(self) -> None:
+        self.update_progress()
+
+    @work
+    async def update_progress(self) -> None:
+        pbar = self.query_one(ProgressBar)
+
+        value: int | list[str]
+        while not isinstance((value := await self.progress_queue.get()), list):
+            pbar.progress = value
+
+        print("Done!", len(value))
+
+        # Should be done now, but just to make sure
+        await self.download_task
+
+        # And we can pop the screen now that we're finished
+        self.dismiss(value)
+
+
 class MTGSearchApp(App):
     """TUI to coordinate searching and scraping (instead of using fzf)"""
 
@@ -193,6 +242,24 @@ class MTGSearchApp(App):
             await self.action_quit()
         else:
             self.query_one(Input).focus()
+
+    def update_autocomplete(self, card_names: list[str] | None) -> None:
+        if card_names is not None:
+            self.query_one(Input).suggester = SuggestFromList(card_names)
+
+    @work
+    async def check_cache(self) -> None:
+        res = await update_cache()
+        if isinstance(res, list):
+            self.update_autocomplete(res)
+            return
+
+        download_size, task, progress_queue = res
+        screen = CacheProgress(download_size, task, progress_queue)
+        self.push_screen(screen, callback=self.update_autocomplete)
+
+    def on_mount(self) -> None:
+        self.check_cache()
 
     def compose(self) -> ComposeResult:
         yield Header()
