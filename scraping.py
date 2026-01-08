@@ -1,8 +1,8 @@
 from typing import NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
 
-import requests
 from bs4 import BeautifulSoup
+import aiohttp
 
 
 class Product(NamedTuple):
@@ -17,7 +17,7 @@ class Product(NamedTuple):
     dest: str
 
 
-def scrape_products(
+async def scrape_products(
     store_name: str,
     link_template: str,
     search_string: str | None = None,
@@ -34,15 +34,15 @@ def scrape_products(
     includes_search_string = True
     search_string = search_string.lower() if search_string is not None else None
 
-    session = requests.Session()
+    session = aiohttp.ClientSession()
 
     while has_products and includes_search_string:
         if output:
             print(f"  Page {page_number}...")
         link = link_template.format(page=page_number)
 
-        response = session.get(link)
-        soup = BeautifulSoup(response.text, "html.parser")
+        async with session.get(link) as res:
+            soup = BeautifulSoup(await res.text(), "html.parser")
 
         if soup.select("p.no-product"):
             break
@@ -90,7 +90,7 @@ def scrape_products(
             if search_string is not None and search_string in full_name.lower():
                 includes_search_string = True
 
-            # For the Forge, card names look like:
+            # For the crystal commerce, card names look like:
             # Traveling Chocobo - Foil - Borderless  <-- everything "-" and after is optional!
             # Esper Origins // Summon: Esper Maduin - Foil  <-- Card w/ transformation
             # Swamp (0301) - Foil  <-- Card that's repeated a bunch of times
@@ -118,5 +118,7 @@ def scrape_products(
             )
 
         page_number += 1
+
+    await session.close()
 
     return products

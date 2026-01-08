@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 
+from concurrent.futures.process import ProcessPoolExecutor
 import itertools
 import json
 import sys
 import urllib.parse
-from multiprocessing import Pool
 from pathlib import Path
 from typing import Any
+import asyncio
 
 from scraping import scrape_products
-
-search_text = sys.argv[1]
-search_text_encoded = urllib.parse.quote_plus(search_text)
 
 search_link_formats = {
     "forge": "https://theforgecville.crystalcommerce.com/products/search?q={search_text}&page={page}&c=8",
@@ -19,26 +17,41 @@ search_link_formats = {
 }
 
 
-def _scrape_store(store_link_info: tuple[str, str]) -> list[dict[str, Any]]:
+async def _scrape_store(
+    store_link_info: tuple[str, str], text: str
+) -> list[dict[str, Any]]:
     store, search_link_format = store_link_info
-    link_format = search_link_format.format(
-        search_text=search_text_encoded, page="{page}"
-    )
-    return [
-        p._asdict() for p in scrape_products(store, link_format, search_text, False)
-    ]
+    text_encoded = urllib.parse.quote_plus(text)
+    link_format = search_link_format.format(search_text=text_encoded, page="{page}")
+    return [p._asdict() for p in await scrape_products(store, link_format, text, False)]
 
 
-if __name__ == "__main__":
-    with Pool(len(search_link_formats)) as pool:
-        items = pool.map(_scrape_store, search_link_formats.items())
-        products = list(itertools.chain(*items))
+async def search_card(text: str) -> tuple[list[dict[str, Any]], Path]:
+    text_encoded = urllib.parse.quote_plus(text)
+
+    futures = [_scrape_store(item, text) for item in search_link_formats.items()]
+
+    results = await asyncio.gather(*futures)
+    products = list(itertools.chain(*results))
 
     out = Path("./out/search")
     out.mkdir(exist_ok=True, parents=True)
 
-    dest = out / f"{hash(search_text_encoded)}.json"
+    dest = out / f"{hash(text_encoded)}.json"
     with dest.open("w") as f:
         json.dump(products, f, indent=2)
 
+    return products, dest
+
+
+async def main():
+    search_text = sys.argv[1]
+    search_text_encoded = urllib.parse.quote_plus(search_text)
+
+    _, dest = await search_card(search_text)
+
     print(dest)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import json
 import webbrowser
 from io import BytesIO
 from pathlib import Path
@@ -9,12 +8,15 @@ from typing import Any
 import aiofiles
 import aiohttp
 import PIL.Image
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, VerticalGroup
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Static
+from textual.widgets import DataTable, Footer, Header, Input, Static
 from textual_image.widget import Image
+
+from search import search_card
 
 IMAGE_CACHE_PATH = Path("~/.cache/mtg-card-images/").expanduser()
 IMAGE_CACHE_PATH.mkdir(parents=True, exist_ok=True)
@@ -76,17 +78,17 @@ class SearchResults(DataTable):
         Binding("end", "scroll_end", "End", show=False),
     ]
 
-    data: list[dict[str, Any]]
+    data: reactive[list[dict[str, Any]]] = reactive([])
 
-    def __init__(self, file_path: str, *args, **kwargs) -> None:
-        with open(file_path) as f:
-            self.data = json.load(f)
-
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(cursor_type="row", zebra_stripes=True, *args, **kwargs)
 
-    def on_mount(self) -> None:
+    def watch_data(self) -> None:
+        print(f"Updating data... {self.data} {len(self.data)}")
         if len(self.data) == 0:
             return
+
+        self.clear(columns=True)
 
         cols = self.data[0].keys()
         column_keys = self.add_columns(*cols)
@@ -122,9 +124,20 @@ class CardDetails(VerticalGroup):
 class SearchView(Container):
     def __init__(self) -> None:
         super().__init__(
-            SearchResults("./out/search/3141209881939731343.json"),
+            Input(placeholder="Search Cards..."),
+            SearchResults(),
             CardDetails(id="card-details"),
         )
+
+    @work(exclusive=True)
+    async def search_for_card(self, search_text: str) -> None:
+        print("Searching...")
+        data, dest = await search_card(search_text)
+        print(f"Finished search... {data}")
+        self.query_one(SearchResults).data = data
+
+    async def on_input_submitted(self, msg: Input.Submitted) -> None:
+        self.search_for_card(msg.value)
 
     async def on_data_table_row_highlighted(
         self, _msg: DataTable.RowHighlighted
