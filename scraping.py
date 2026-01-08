@@ -1,9 +1,8 @@
-from typing import Any
-from typing import NamedTuple, cast
+from typing import Any, NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
 
-from bs4 import BeautifulSoup
 import aiohttp
+from bs4 import BeautifulSoup
 
 
 class Product(NamedTuple):

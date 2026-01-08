@@ -1,4 +1,3 @@
-from scraping import Product
 import asyncio
 import hashlib
 import webbrowser
@@ -16,6 +15,7 @@ from textual.reactive import reactive
 from textual.widgets import DataTable, Footer, Header, Input, Label
 from textual_image.widget import Image
 
+from scraping import Product
 from search import search_card
 
 IMAGE_CACHE_PATH = Path("~/.cache/mtg-card-images/").expanduser()
@@ -109,14 +109,15 @@ class CardDetails(VerticalGroup):
             **kwargs,
         )
 
-    async def watch_data(self, new_data: Product | None) -> None:
-        if new_data is None:
-            return
-
+    @work(exclusive=True)
+    async def load_product(self, product: Product) -> None:
         img = self.query_one(Image)
-        img.image = await get_image_path(new_data.img_src)
+        img.image = await get_image_path(product.img_src)
+        self.query_one(Label).update(product.rich_text())
 
-        self.query_one(Label).update(new_data.rich_text())
+    async def watch_data(self, new_data: Product | None) -> None:
+        if new_data is not None:
+            self.load_product(new_data)
 
 
 class SearchView(Container):

@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 
-from scraping import Product
-from concurrent.futures.process import ProcessPoolExecutor
+import asyncio
 import itertools
 import json
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Any
-import asyncio
 
-from scraping import scrape_products
+from scraping import Product, scrape_products
 
 search_link_formats = {
     "forge": "https://theforgecville.crystalcommerce.com/products/search?q={search_text}&page={page}&c=8",
