@@ -19,8 +19,14 @@ class Product(NamedTuple):
     def from_dict(d: dict[str, Any]) -> "Product":
         return Product(**d)
 
-    def rich_text(self) -> str:
-        return f"[b cyan]{self.name}[/b cyan]\n{self.attributes}\n[i]{self.store}[/i]\nQty: {self.stock}\n[b]${self.price:.02f}[/b]\n[gray]{self.description}[/gray]"
+    def rich_text(self, tcgplayer_price: float | None = None) -> str:
+        """Convert the product to a description using markup from the Rich library, with an optional TCGPlayer price."""
+        tcgplayer_label = (
+            f" -- TCGPlayer: ${tcgplayer_price:.02f}"
+            if tcgplayer_price is not None
+            else ""
+        )
+        return f"[b cyan]{self.name}[/b cyan]\n{self.attributes}\n[i]{self.store}[/i]\nQty: {self.stock}\n[b]${self.price:.02f}[/b]{tcgplayer_label}\n[gray]{self.description}[/gray]"
 
 
 async def scrape_products(

@@ -1,14 +1,9 @@
-from typing import override
-from textual.suggester import SuggestFromList
-from textual.containers import Middle
-from textual.containers import Center
-from textual.screen import Screen
-from card_names import update_cache
 import asyncio
 import hashlib
 import webbrowser
 from io import BytesIO
 from pathlib import Path
+from typing import override
 
 import aiofiles
 import aiohttp
@@ -16,14 +11,18 @@ import PIL.Image
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, VerticalGroup
+from textual.containers import Center, Container, Middle, VerticalGroup
 from textual.fuzzy import FuzzySearch
 from textual.reactive import reactive
+from textual.screen import Screen
+from textual.suggester import SuggestFromList
 from textual.widgets import DataTable, Footer, Header, Input, Label, ProgressBar
 from textual_image.widget import Image
 
+from card_names import update_cache
 from scraping import Product
 from search import search_card
+from tcgplayer import find_tcgplayer_price
 
 IMAGE_CACHE_PATH = Path("~/.cache/mtg-card-images/").expanduser()
 IMAGE_CACHE_PATH.mkdir(parents=True, exist_ok=True)
@@ -125,8 +124,14 @@ class CardDetails(VerticalGroup):
         since loading an image we're not looking at anymore is pointless.
         """
         img = self.query_one(Image)
+        detail_label = self.query_one(Label)
+
         img.image = await _get_image(product.img_src)
-        self.query_one(Label).update(product.rich_text())
+        detail_label.update(product.rich_text())
+        price = await find_tcgplayer_price(product.name)
+        if price is not None:
+            print(product.rich_text(price))
+            detail_label.update(product.rich_text(price))
 
     async def watch_data(self, new_data: Product | None) -> None:
         self.query_one(Label).update("")
