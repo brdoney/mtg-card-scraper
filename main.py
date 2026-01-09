@@ -1,3 +1,4 @@
+from typing import override
 from textual.suggester import SuggestFromList
 from textual.containers import Middle
 from textual.containers import Center
@@ -63,17 +64,10 @@ class SearchResults(DataTable):
 
     # Adds Emacs (ctrl+p/n/b/f) and Vim (hjkl) cursor movement bindings
     BINDINGS = [
-        Binding("enter", "select_cursor", "Select", show=False),
         Binding("up,ctrl+p,k", "cursor_up", "Cursor up", show=False),
         Binding("down,ctrl+n,j", "cursor_down", "Cursor down", show=False),
         Binding("right,ctrl+f,l", "cursor_right", "Cursor right", show=False),
         Binding("left,ctrl+b,h", "cursor_left", "Cursor left", show=False),
-        Binding("pageup", "page_up", "Page up", show=False),
-        Binding("pagedown", "page_down", "Page down", show=False),
-        Binding("ctrl+home", "scroll_top", "Top", show=False),
-        Binding("ctrl+end", "scroll_bottom", "Bottom", show=False),
-        Binding("home", "scroll_home", "Home", show=False),
-        Binding("end", "scroll_end", "End", show=False),
     ]
 
     # The search string, for fuzzy filtering+sorting
@@ -135,14 +129,42 @@ class CardDetails(VerticalGroup):
         self.query_one(Label).update(product.rich_text())
 
     async def watch_data(self, new_data: Product | None) -> None:
+        self.query_one(Label).update("")
+        self.query_one(Image).image = None
+
         if new_data is not None:
             self.load_product(new_data)
+
+
+class CardInput(Input):
+    def accept_completion(self) -> bool:
+        # Suggestion takes a bit to update b/c its in a worker thread, so we need to explicitly check against value
+        if self.cursor_at_end and self._suggestion and self.value != self._suggestion:
+            self.value = self._suggestion
+            self.cursor_position = len(self.value)  # type: ignore
+            return True
+        return False
+
+    @override
+    async def action_submit(self) -> None:
+        """
+        Accept an auto-completion or move the cursor one position to the
+        right or handle a submit action if not autocompletion is present.
+
+        Normally triggered by the user pressing Enter. This may also run any validators.
+        """
+        if not self.accept_completion():
+            print("No suggestion")
+            validation_result = (
+                self.validate(self.value) if "submitted" in self.validate_on else None
+            )
+            self.post_message(self.Submitted(self, self.value, validation_result))
 
 
 class SearchView(Container):
     def __init__(self) -> None:
         super().__init__(
-            Input(placeholder="Search Cards..."),
+            CardInput(placeholder="Search Cards..."),
             SearchResults(id="search-results"),
             CardDetails(id="card-details"),
         )
@@ -157,6 +179,7 @@ class SearchView(Container):
         card_details.loading = True
 
         search_results.data = []
+        card_details.data = None
 
         data, dest = await search_card(search_text)
 
@@ -245,7 +268,9 @@ class MTGSearchApp(App):
 
     def update_autocomplete(self, card_names: list[str] | None) -> None:
         if card_names is not None:
-            self.query_one(Input).suggester = SuggestFromList(card_names)
+            self.query_one(Input).suggester = SuggestFromList(
+                card_names, case_sensitive=False
+            )
 
     @work
     async def check_cache(self) -> None:
