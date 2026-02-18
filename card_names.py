@@ -63,7 +63,7 @@ async def update_cache() -> tuple[int, asyncio.Task, asyncio.Queue] | list[str]:
     source: dict[str, Any] | None = None
     for source in sources:
         # Keep going until we find the default cards source
-        if source["name"] == "Default Cards":
+        if source["name"] == "Oracle Cards":
             break
 
     if source is None:

@@ -126,12 +126,19 @@ class CardDetails(VerticalGroup):
         img = self.query_one(Image)
         detail_label = self.query_one(Label)
 
-        img.image = await _get_image(product.img_src)
+        try:
+            img.image = await _get_image(product.img_src)
+        except PIL.UnidentifiedImageError:
+            pass
+
         detail_label.update(product.rich_text())
-        price = await find_tcgplayer_price(product.name)
-        if price is not None:
-            print(product.rich_text(price))
-            detail_label.update(product.rich_text(price))
+
+        try:
+            price = await find_tcgplayer_price(product.name)
+            if price is not None:
+                detail_label.update(product.rich_text(price))
+        except KeyError:
+            pass
 
     async def watch_data(self, new_data: Product | None) -> None:
         self.query_one(Label).update("")
