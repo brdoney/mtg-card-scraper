@@ -149,6 +149,10 @@ class CardDetails(VerticalGroup):
 
 
 class CardInput(Input):
+    BINDINGS = [
+        Binding("shift+enter", "submit_nocomplete", "Submit", show=False),
+    ]
+
     def accept_completion(self) -> bool:
         # Suggestion takes a bit to update b/c its in a worker thread, so we need to explicitly check against value
         if self.cursor_at_end and self._suggestion and self.value != self._suggestion:
@@ -161,16 +165,20 @@ class CardInput(Input):
     async def action_submit(self) -> None:
         """
         Accept an auto-completion or move the cursor one position to the
-        right or handle a submit action if not autocompletion is present.
+        right or handle a submit action if no autocompletion is present.
 
         Normally triggered by the user pressing Enter. This may also run any validators.
         """
         if not self.accept_completion():
-            print("No suggestion")
             validation_result = (
                 self.validate(self.value) if "submitted" in self.validate_on else None
             )
             self.post_message(self.Submitted(self, self.value, validation_result))
+
+    async def action_submit_nocomplete(self) -> None:
+        """Submit action that overrides a check for autocomplete suggestions."""
+        self._suggestion = ""
+        await self.action_submit()
 
 
 class SearchView(Container):
