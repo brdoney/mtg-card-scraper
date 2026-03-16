@@ -4,7 +4,7 @@ Search for Magic the Gathering cards at local game shops, compare prices, and mo
 
 ## Terminal
 
-While any terminal will work, only the [kitty](https://github.com/kovidgoyal/kitty) terminal will show card preview images at the moment.
+See [textual-image's support matrix](https://github.com/lnqs/textual-image#support-matrix-1) to see if card preview images will work in your terminal.
 
 ## Setup
 
