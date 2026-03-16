@@ -16,3 +16,7 @@
 #search-results {
   height: 100%;
 }
+
+#no-results {
+  padding: 1;
+}

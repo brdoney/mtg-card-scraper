@@ -58,6 +58,18 @@ async def _get_image(url: str) -> PIL.Image.Image:
             return img
 
 
+def filter_data(data: list[Product], search_text: str):
+    """
+    Use fuzzy search to filter + sort results, since crystal commerce's
+    search pulls some unrelated cards (false positives).
+    """
+    fuzzy = FuzzySearch()
+    fuzzy_lookup = {p: fuzzy.match(search_text, p.name)[0] for p in data}
+    filtered = [p for p in data if fuzzy_lookup[p] > 0.1]
+    filtered.sort(key=lambda p: (fuzzy_lookup[p], -p.price), reverse=True)
+    return filtered
+
+
 class SearchResults(DataTable):
     COLUMNS = {"name", "attributes", "store", "stock", "price", "description"}
 
@@ -69,32 +81,21 @@ class SearchResults(DataTable):
         Binding("left,ctrl+b,h", "cursor_left", "Cursor left", show=False),
     ]
 
-    # The search string, for fuzzy filtering+sorting
-    search_text: str = ""
-    # The raw product data from the search
+    # The product data from the search
     data: reactive[list[Product]] = reactive([])
-    # The data, after filtering and sorting by fuzzy matching
-    filtered: list[Product] = []
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(cursor_type="row", zebra_stripes=True, *args, **kwargs)
 
     def watch_data(self) -> None:
         self.clear(columns=True)
-        self.filtered = []
 
         if len(self.data) == 0:
             return
 
         cols = Product._fields
         column_keys = self.add_columns(*zip(cols, cols))
-
-        # Use fuzzy search to filter + sort results, since crystal commerce's search pull some unrelated cards (false positives)
-        fuzzy = FuzzySearch()
-        fuzzy_lookup = {p: fuzzy.match(self.search_text, p.name)[0] for p in self.data}
-        self.filtered = [p for p in self.data if fuzzy_lookup[p] > 0.1]
-        self.filtered.sort(key=lambda p: (fuzzy_lookup[p], -p.price), reverse=True)
-        self.add_rows(self.filtered)
+        self.add_rows(self.data)
 
         for i, col in enumerate(cols):
             if col not in self.COLUMNS:
@@ -102,7 +103,7 @@ class SearchResults(DataTable):
 
     def get_highlighted_product(self) -> Product:
         """Get the product currently highlighted by the cursor"""
-        return self.filtered[self.cursor_row]
+        return self.data[self.cursor_row]
 
 
 class CardDetails(VerticalGroup):
@@ -150,7 +151,8 @@ class CardDetails(VerticalGroup):
 
 class CardInput(Input):
     BINDINGS = [
-        Binding("shift+enter", "submit_nocomplete", "Submit", show=False),
+        Binding("shift", "submit", "Autocomplete and Submit", show=True),
+        Binding("shift+enter", "submit_nocomplete", "Submit", show=True),
     ]
 
     def accept_completion(self) -> bool:
@@ -182,17 +184,19 @@ class CardInput(Input):
 
 
 class SearchView(Container):
-    def __init__(self) -> None:
-        super().__init__(
-            CardInput(placeholder="Search Cards..."),
-            SearchResults(id="search-results"),
-            CardDetails(id="card-details"),
-        )
+    def compose(self) -> ComposeResult:
+        yield CardInput(placeholder="Search Cards...")
+        with Container(id="results-area"):
+            yield SearchResults(id="search-results")
+            with Center():
+                yield Label("No results found", id="no-results")
+        yield CardDetails(id="card-details")
 
     @work(exclusive=True)
     async def search_for_card(self, search_text: str) -> None:
         search_results = self.query_one(SearchResults)
         card_details = self.query_one(CardDetails)
+        no_results = self.query_one("#no-results")
 
         # Use the card details for the loading bar
         # Multiple (i.e. also the grid) is kind of jarring
@@ -202,9 +206,13 @@ class SearchView(Container):
         card_details.data = None
 
         data, dest = await search_card(search_text)
+        data = filter_data(data, search_text)
 
-        search_results.search_text = search_text
         search_results.data = data
+
+        has_results = len(data) > 0
+        no_results.display = not has_results
+        search_results.display = has_results
 
         card_details.loading = False
 
@@ -277,7 +285,7 @@ class MTGSearchApp(App):
 
     BINDINGS = [
         Binding("q", "quit", "Quit", show=False),
-        Binding("escape", "pop_focus", "Pop focus", show=False),
+        Binding("escape", "pop_focus", "Pop focus", show=True),
     ]
 
     async def action_pop_focus(self) -> None:
