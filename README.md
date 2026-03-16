@@ -26,4 +26,4 @@ Most of the files should be consumable as standalone library files though.
 
 ## Developing
 
-I', using [Textual](https://textual.textualize.io) to write the TUI. But because textual takes over the terminal to display the UI, you won't see any print statements you add while developing. To see those and other Textual-defined debug messages while running the app, I run `textual console --exclude EVENT` in one terminal and `textual run --dev main.py` in another.
+I'm, using [Textual](https://textual.textualize.io) to write the TUI. But because textual takes over the terminal to display the UI, you won't see any print statements you add while developing. To see those and other Textual-defined debug messages while running the app, I run `textual console --exclude EVENT` in one terminal and `textual run --dev main.py` in another.
