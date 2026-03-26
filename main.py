@@ -151,7 +151,7 @@ class CardDetails(VerticalGroup):
 
 class CardInput(Input):
     BINDINGS = [
-        Binding("shift", "submit", "Autocomplete and Submit", show=True),
+        Binding("enter", "submit", "Autocomplete and Submit", show=True),
         Binding("shift+enter", "submit_nocomplete", "Submit", show=True),
     ]
 
