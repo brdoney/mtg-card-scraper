@@ -320,4 +320,5 @@ class MTGSearchApp(App):
         yield Footer()
 
 
-MTGSearchApp().run()
+if __name__ == "__main__":
+    MTGSearchApp().run()

@@ -77,7 +77,7 @@ async def find_tcgplayer_price(name: str) -> float | None:
         return _PRICE_CACHE[name]
 
     res = await _search_card_tcgplayer(name)
-    print(res)
+    # print(res)
     card = _find_match(name, res)
     if card is not None:
         price = card["medianPrice"]
