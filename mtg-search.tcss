@@ -20,3 +20,8 @@
 #no-results {
   padding: 1;
 }
+
+#search-status {
+  padding: 0 1;
+  color: $text-muted;
+}

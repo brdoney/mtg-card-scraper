@@ -21,7 +21,7 @@ from textual_image.widget import Image
 
 from card_names import update_cache
 from scraping import Product
-from search import search_card
+from search import parse_search, search_card, search_link_formats
 from tcgplayer import find_tcgplayer_price
 
 IMAGE_CACHE_PATH = Path("~/.cache/mtg-card-images/").expanduser()
@@ -186,6 +186,7 @@ class CardInput(Input):
 class SearchView(Container):
     def compose(self) -> ComposeResult:
         yield CardInput(placeholder="Search Cards...")
+        yield Label("", id="search-status")
         with Container(id="results-area"):
             yield SearchResults(id="search-results")
             with Center():
@@ -197,6 +198,7 @@ class SearchView(Container):
         search_results = self.query_one(SearchResults)
         card_details = self.query_one(CardDetails)
         no_results = self.query_one("#no-results")
+        status = self.query_one("#search-status", Label)
 
         # Use the card details for the loading bar
         # Multiple (i.e. also the grid) is kind of jarring
@@ -204,6 +206,9 @@ class SearchView(Container):
 
         search_results.data = []
         card_details.data = None
+
+        stores = ", ".join(search_link_formats.keys())
+        status.update(f"Searching {stores}...")
 
         data, dest = await search_card(search_text)
         data = filter_data(data, search_text)
@@ -215,6 +220,7 @@ class SearchView(Container):
         search_results.display = has_results
 
         card_details.loading = False
+        status.update(f"{len(data)} results")
 
     async def on_input_submitted(self, msg: Input.Submitted) -> None:
         # Use the worker to search for the card
