@@ -1,8 +1,16 @@
+import re
+import urllib.parse
 from typing import Any, NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
 
 import aiohttp
 from bs4 import BeautifulSoup
+
+# A browser-like UA; TCGplayer's storefront edge rejects the default client UA.
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+)
 
 
 class Product(NamedTuple):
@@ -132,5 +140,238 @@ async def scrape_products(
         page_number += 1
 
     await session.close()
+
+    return products
+
+
+async def scrape_forge_api(
+    store_name: str,
+    api_url: str,
+    search_string: str,
+    output: bool = True,
+) -> list[Product]:
+    """Scrape Forge Games & Hobbies, which serves a JS storefront backed by a
+    JSON POS-search API instead of Crystal Commerce's paginated HTML.
+
+    `api_url` is the base endpoint (e.g. .../api/inventory-api.php); the query
+    string is built here. Each catalog item can carry several condition rows
+    (NM/LP/...) at different prices, so we emit one Product per in-stock
+    condition, mirroring how the site's own front-end flattens results.
+    """
+    base = urlparse(api_url)._replace(path="", params="", query="", fragment="")
+
+    query = urllib.parse.urlencode(
+        {
+            "action": "pos_search",
+            "q": search_string,
+            "limit": 200,
+            "game": "mtg",
+        }
+    )
+    link = f"{api_url}?{query}"
+
+    if output:
+        print(f"  Querying {store_name} API...")
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(link) as res:
+            data = await res.json()
+
+    if not (data and data.get("ok") and isinstance(data.get("items"), list)):
+        return []
+
+    products: list[Product] = []
+    for item in data["items"]:
+        # This tool only deals in singles; skip sealed/accessories rows.
+        if item.get("category") not in (None, "singles"):
+            continue
+
+        full_name = (item.get("name") or "").strip()
+        if not full_name:
+            continue
+
+        # Match the Crystal Commerce convention: everything after the first
+        # " - " is treatment/foil/variant info.
+        parts = full_name.split(" - ", 1)
+        name, rest = (
+            (parts[0].strip(), parts[1].strip())
+            if len(parts) > 1
+            else (full_name, "")
+        )
+
+        card_set = item.get("set") or ""
+        image = item.get("image_url") or ""
+        # Link back to the storefront search for this card (no per-card pages).
+        dest = cast(
+            str,
+            urlunparse(
+                base._replace(
+                    path="/store",
+                    query=urllib.parse.urlencode(
+                        {"game": "mtg", "type": "singles", "q": name}
+                    ),
+                )
+            ),
+        )
+
+        for cond in item.get("conditions", []):
+            qty = int(cond.get("qty") or 0)
+            if qty <= 0:
+                continue
+
+            # Prefer the listed price; fall back to market price like the site.
+            price = float(cond.get("price") or 0)
+            if price <= 0:
+                market = float(cond.get("market_price_market") or 0)
+                low = float(cond.get("market_price_low") or 0)
+                price = min(market, low) if market > 0 and low > 0 else (low or market)
+
+            condition = cond.get("condition") or ""
+            description = f"{card_set} · {condition}".strip(" ·") if card_set or condition else ""
+
+            products.append(
+                Product(
+                    name=name,
+                    attributes=rest,
+                    store=store_name,
+                    stock=qty,
+                    price=price,
+                    description=description,
+                    img_medium_src=image,
+                    img_src=image,
+                    dest=dest,
+                )
+            )
+
+    return products
+
+
+def _split_tcg_name(full_name: str) -> tuple[str, str]:
+    """Split a TCGplayer product name into a base name + attribute string.
+
+    TCGplayer puts treatments in trailing parentheses, e.g.
+    "Demonic Tutor (JP Alternate Art) (Foil Etched)" → ("Demonic Tutor",
+    "JP Alternate Art - Foil Etched"). The base name is what we fuzzy-match
+    the search query against, so it must stay clean.
+    """
+    groups = re.findall(r"\(([^)]*)\)", full_name)
+    base = re.sub(r"\s*\([^)]*\)", "", full_name).strip()
+    return base, " - ".join(g.strip() for g in groups)
+
+
+async def scrape_tcgplayer_pro(
+    store_name: str,
+    base_url: str,
+    search_string: str,
+    output: bool = True,
+) -> list[Product]:
+    """Scrape a TCGplayer Pro storefront (``*.tcgplayerpro.com``).
+
+    These are Vue SPAs backed by two JSON endpoints: ``/api/catalog/search``
+    (POST) returns in-stock products with a "lowest price", and
+    ``/api/inventory/skus`` returns the per-condition listings (price, qty,
+    foil) for a batch of product ids. We emit one Product per in-stock SKU so
+    different conditions/finishes show as separate, comparable rows.
+    """
+    base = urlparse(base_url)._replace(path="", params="", query="", fragment="")
+    headers = {
+        "User-Agent": _BROWSER_UA,
+        "Accept": "application/json, text/plain, */*",
+        "Origin": base_url,
+        "Referer": base_url + "/",
+    }
+
+    payload = {
+        "query": search_string,
+        "context": {"productLineName": "Magic: The Gathering"},
+        "filters": {},
+        "from": 0,
+        "size": 50,
+        "sort": [{"field": "in-stock-price-sort", "order": "desc"}],
+    }
+
+    if output:
+        print(f"  Querying {store_name} API...")
+
+    async with aiohttp.ClientSession(headers=headers) as session:
+        async with session.post(
+            base_url + "/api/catalog/search", json=payload
+        ) as res:
+            data = await res.json()
+
+        items = (data.get("products") or {}).get("items") or []
+        by_id = {it["id"]: it for it in items if it.get("id") is not None}
+        if not by_id:
+            return []
+
+        # Fetch per-SKU listings (condition/qty/price/foil) in id batches.
+        ids = list(by_id)
+        skus_by_product: dict[int, list[dict]] = {}
+        for start in range(0, len(ids), 25):
+            batch = ids[start : start + 25]
+            id_param = ",".join(str(i) for i in batch)
+            async with session.get(
+                base_url + "/api/inventory/skus", params={"productIds": id_param}
+            ) as res:
+                sku_data = await res.json()
+            for entry in sku_data or []:
+                skus_by_product[entry.get("productId")] = entry.get("skus") or []
+
+    products: list[Product] = []
+    for pid, item in by_id.items():
+        name, attrs = _split_tcg_name(item.get("name") or "")
+        if not name:
+            continue
+
+        card_set = item.get("setName") or ""
+        image = cast(
+            str, urlunparse(("https", "tcgplayer-cdn.tcgplayer.com", f"/product/{pid}_200w.jpg", "", "", ""))
+        )
+        # Rebuild the storefront product URL the same way the site does.
+        dest = cast(
+            str,
+            urlunparse(
+                base._replace(
+                    path="/".join(
+                        [
+                            "/catalog",
+                            item.get("productLineUrlName") or "magic",
+                            item.get("setUrlName") or "",
+                            item.get("productUrlName") or "",
+                            str(pid),
+                        ]
+                    )
+                )
+            ),
+        )
+
+        for sku in skus_by_product.get(pid, []):
+            qty = int(sku.get("quantity") or 0)
+            if qty <= 0:
+                continue
+            price = float(sku.get("price") or 0)
+            condition = sku.get("conditionName") or ""
+
+            sku_attrs = attrs
+            if sku.get("isFoil") and "foil" not in attrs.lower():
+                sku_attrs = f"{attrs} - Foil".strip(" -") if attrs else "Foil"
+
+            language = sku.get("languageName") or ""
+            desc_bits = [b for b in (card_set, condition, language if language and language != "English" else "") if b]
+            description = " · ".join(desc_bits)
+
+            products.append(
+                Product(
+                    name=name,
+                    attributes=sku_attrs,
+                    store=store_name,
+                    stock=qty,
+                    price=price,
+                    description=description,
+                    img_medium_src=image,
+                    img_src=image,
+                    dest=dest,
+                )
+            )
 
     return products

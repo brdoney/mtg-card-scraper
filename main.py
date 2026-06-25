@@ -21,7 +21,7 @@ from textual_image.widget import Image
 
 from card_names import update_cache
 from scraping import Product
-from search import parse_search, search_card, search_link_formats
+from search import search_card, store_names
 from tcgplayer import find_tcgplayer_price
 
 IMAGE_CACHE_PATH = Path("~/.cache/mtg-card-images/").expanduser()
@@ -207,7 +207,7 @@ class SearchView(Container):
         search_results.data = []
         card_details.data = None
 
-        stores = ", ".join(search_link_formats.keys())
+        stores = ", ".join(store_names)
         status.update(f"Searching {stores}...")
 
         data, dest = await search_card(search_text)

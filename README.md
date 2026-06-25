@@ -1,6 +1,6 @@
 # MTG Card Scraper
 
-Search for Magic the Gathering cards at local game shops, compare prices, and more. Currently supports any game shop with a Crystal Commerce website.
+Search for Magic the Gathering cards at local game shops, compare prices, and more. Supports any game shop with a Crystal Commerce website, plus Forge Games & Hobbies (`forgegamesandhobbies.com`) via its JSON inventory API and TCGplayer Pro storefronts (`*.tcgplayerpro.com`, e.g. Lifelink Games) via their catalog/inventory API.
 
 ## Terminal
 
