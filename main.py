@@ -127,10 +127,13 @@ class CardDetails(VerticalGroup):
         img = self.query_one(Image)
         detail_label = self.query_one(Label)
 
-        try:
-            img.image = await _get_image(product.img_src)
-        except PIL.UnidentifiedImageError:
-            pass
+        # Some stores (e.g. the JSON APIs) have no image for certain printings,
+        # leaving img_src empty; others may 404. Never let that crash the view.
+        if product.img_src:
+            try:
+                img.image = await _get_image(product.img_src)
+            except (PIL.UnidentifiedImageError, aiohttp.ClientError, ValueError):
+                pass
 
         detail_label.update(product.rich_text())
 
