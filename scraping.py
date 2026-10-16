@@ -1,6 +1,6 @@
 import re
 import urllib.parse
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple
 from urllib.parse import urlparse, urlunparse
 
 import aiohttp
@@ -24,6 +24,7 @@ class Product(NamedTuple):
     img_src: str
     dest: str
 
+    # pyrefly: ignore[invalid-annotation]
     def from_dict(d: dict[str, Any]) -> "Product":
         return Product(**d)
 
@@ -101,7 +102,9 @@ async def scrape_products(
 
             stock = int(stock_tag.text.split()[0])
             price = float(price_tag.text[1:])
-            dest = cast(str, urlunparse(base_link._replace(path=dest_tag["href"])))
+
+            # pyrefly: ignore[bad-argument-type]
+            dest = urlunparse(base_link._replace(path=dest_tag["href"]))
 
             assert stock > 0 and isinstance(img_medium_src, str)
 
@@ -173,9 +176,8 @@ async def scrape_forge_api(
     if output:
         print(f"  Querying {store_name} API...")
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(link) as res:
-            data = await res.json()
+    async with aiohttp.ClientSession() as session, session.get(link) as res:
+        data = await res.json()
 
     if not (data and data.get("ok") and isinstance(data.get("items"), list)):
         return []
@@ -202,16 +204,13 @@ async def scrape_forge_api(
         card_set = item.get("set") or ""
         image = item.get("image_url") or ""
         # Link back to the storefront search for this card (no per-card pages).
-        dest = cast(
-            str,
-            urlunparse(
-                base._replace(
-                    path="/store",
-                    query=urllib.parse.urlencode(
-                        {"game": "mtg", "type": "singles", "q": name}
-                    ),
-                )
-            ),
+        dest = urlunparse(
+            base._replace(
+                path="/store",
+                query=urllib.parse.urlencode(
+                    {"game": "mtg", "type": "singles", "q": name}
+                ),
+            )
         )
 
         for cond in item.get("conditions", []):
@@ -324,25 +323,20 @@ async def scrape_tcgplayer_pro(
             continue
 
         card_set = item.get("setName") or ""
-        image = cast(
-            str, urlunparse(("https", "tcgplayer-cdn.tcgplayer.com", f"/product/{pid}_200w.jpg", "", "", ""))
-        )
+        image = urlunparse(("https", "tcgplayer-cdn.tcgplayer.com", f"/product/{pid}_200w.jpg", "", "", ""))
         # Rebuild the storefront product URL the same way the site does.
-        dest = cast(
-            str,
-            urlunparse(
-                base._replace(
-                    path="/".join(
-                        [
-                            "/catalog",
-                            item.get("productLineUrlName") or "magic",
-                            item.get("setUrlName") or "",
-                            item.get("productUrlName") or "",
-                            str(pid),
-                        ]
-                    )
+        dest = urlunparse(
+            base._replace(
+                path="/".join(
+                    [
+                        "/catalog",
+                        item.get("productLineUrlName") or "magic",
+                        item.get("setUrlName") or "",
+                        item.get("productUrlName") or "",
+                        str(pid),
+                    ]
                 )
-            ),
+            )
         )
 
         for sku in skus_by_product.get(pid, []):

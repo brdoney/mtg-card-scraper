@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-import asyncio
 import argparse
+import asyncio
 import pathlib
 import re
 import webbrowser
 
-from main import CardDetails
-from scraping import Product
-from search import search_card
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
-from textual.widgets import DataTable, Footer, Header, Label
-from textual.reactive import reactive
 from textual.fuzzy import FuzzySearch
+from textual.reactive import reactive
+from textual.widgets import DataTable, Footer, Header, Label
+
+from main import CardDetails
+from scraping import Product
+from search import search_card
 
 
 def filter_data(data: list[Product], search_text: str) -> list[Product]:

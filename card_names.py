@@ -1,6 +1,6 @@
-from datetime import datetime
 import asyncio
 import pickle
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +15,9 @@ CARD_NAME_PATH = CACHE_PATH / "card-names.json"
 
 
 def extract_names() -> list[str]:
-    names = []
     with open(CARD_BULK_PATH, "rb") as f:
         # for each object in the top-level array, read the "name" property
-        for name in ijson.items(f, "item.name"):
-            names.append(name)
+        names: list[str] = list.copy(ijson.items(f, "item.name"))
     return names
 
 
@@ -30,17 +28,16 @@ async def load_names() -> list[str]:
 
 
 async def download_card_data(download_uri: str, progress_queue: asyncio.Queue) -> None:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(download_uri) as res:
-            res.raise_for_status()
+    async with aiohttp.ClientSession() as session, session.get(download_uri) as res:
+        res.raise_for_status()
 
-            bytes_downloaded = 0
-            chunk_size = 8192
-            async with aiofiles.open(CARD_BULK_PATH, "wb") as f:
-                async for chunk in res.content.iter_chunked(chunk_size):
-                    bytes_downloaded += chunk_size
-                    progress_queue.put_nowait(bytes_downloaded)
-                    await f.write(chunk)
+        bytes_downloaded = 0
+        chunk_size = 8192
+        async with aiofiles.open(CARD_BULK_PATH, "wb") as f:
+            async for chunk in res.content.iter_chunked(chunk_size):
+                bytes_downloaded += chunk_size
+                progress_queue.put_nowait(bytes_downloaded)
+                await f.write(chunk)
 
     names = extract_names()
     print("Putting names in")
@@ -54,10 +51,9 @@ async def download_card_data(download_uri: str, progress_queue: asyncio.Queue) -
 
 
 async def update_cache() -> tuple[int, asyncio.Task, asyncio.Queue] | list[str]:
-    async with aiohttp.ClientSession() as session:
-        async with session.get("https://api.scryfall.com/bulk-data") as res:
-            res.raise_for_status()
-            data: dict[str, Any] = await res.json()
+    async with aiohttp.ClientSession() as session, session.get("https://api.scryfall.com/bulk-data") as res:
+        res.raise_for_status()
+        data: dict[str, Any] = await res.json()
 
     sources: list[dict[str, Any]] = data["data"]
     source: dict[str, Any] | None = None
@@ -69,8 +65,8 @@ async def update_cache() -> tuple[int, asyncio.Task, asyncio.Queue] | list[str]:
     if source is None:
         raise RuntimeError("Could not find default card bulk object from scryfall")
 
-    download_uri = source["download_uri"]
-    size = source["size"]
+    download_uri = source["jsonl_download_uri"]
+    size = source["compressed_size"]
     last_updated = source["updated_at"]
     last_updated_datetime = datetime.fromisoformat(last_updated)
 

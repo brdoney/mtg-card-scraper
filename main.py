@@ -45,17 +45,16 @@ async def _get_image(url: str) -> PIL.Image.Image:
         return PIL.Image.open(path)
 
     # Otherwise, download it
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as res:
-            data = await res.read()
+    async with aiohttp.ClientSession() as session, session.get(url) as res:
+        data = await res.read()
 
-            # Create a background task to save the image for the future
-            asyncio.create_task(_save_image(path, data))
+        # Create a background task to save the image for the future
+        asyncio.create_task(_save_image(path, data))
 
-            img = PIL.Image.open(BytesIO(data))
-            img.load()
+        img = PIL.Image.open(BytesIO(data))
+        img.load()
 
-            return img
+        return img
 
 
 def filter_data(data: list[Product], search_text: str):
@@ -85,7 +84,7 @@ class SearchResults(DataTable):
     data: reactive[list[Product]] = reactive([])
 
     def __init__(self, *args, **kwargs) -> None:
-        super().__init__(cursor_type="row", zebra_stripes=True, *args, **kwargs)
+        super().__init__(*args, cursor_type="row", zebra_stripes=True, **kwargs)
 
     def watch_data(self) -> None:
         self.clear(columns=True)
@@ -213,7 +212,7 @@ class SearchView(Container):
         stores = ", ".join(store_names)
         status.update(f"Searching {stores}...")
 
-        data, dest = await search_card(search_text)
+        data, _dest = await search_card(search_text)
         data = filter_data(data, search_text)
 
         search_results.data = data

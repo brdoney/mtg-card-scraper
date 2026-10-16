@@ -1,8 +1,9 @@
-from textual.fuzzy import FuzzySearch
-from rich.pretty import pprint
-from typing import Any
 import asyncio
+from typing import Any
+
 import aiohttp
+from rich.pretty import pprint
+from textual.fuzzy import FuzzySearch
 
 _PRICE_CACHE: dict[str, float] = {}
 
@@ -14,40 +15,39 @@ async def _search_card_tcgplayer(name: str) -> dict[str, Any]:
     NOTE: Uses the public API (that the website uses), which has no stability
     guarantees but doesn't require authentication.
     """
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            "https://mp-search-api.tcgplayer.com/v1/search/request",
-            params={"q": name},
-            json={
-                "algorithm": "sales_dismax",
-                "from": 0,
-                "size": 24,
-                "filters": {"term": {"productLineName": ["magic"]}},
-                "range": {},
-                "match": {},
-                "listingSearch": {
-                    "context": {"cart": {}},
-                    "filters": {
-                        "term": {"sellerStatus": "Live", "channelId": 0},
-                        "range": {"quantity": {"gte": 1}},
-                        "exclude": {"channelExclusion": 0},
-                    },
+    async with aiohttp.ClientSession() as session, session.post(
+        "https://mp-search-api.tcgplayer.com/v1/search/request",
+        params={"q": name},
+        json={
+            "algorithm": "sales_dismax",
+            "from": 0,
+            "size": 24,
+            "filters": {"term": {"productLineName": ["magic"]}},
+            "range": {},
+            "match": {},
+            "listingSearch": {
+                "context": {"cart": {}},
+                "filters": {
+                    "term": {"sellerStatus": "Live", "channelId": 0},
+                    "range": {"quantity": {"gte": 1}},
+                    "exclude": {"channelExclusion": 0},
                 },
-                "context": {
-                    "cart": {},
-                    "shippingCountry": "US",
-                    "userProfile": {"priceAffinity": 215},
-                },
-                "settings": {"useFuzzySearch": True, "didYouMean": {}},
-                "sort": {},
             },
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json",
+            "context": {
+                "cart": {},
+                "shippingCountry": "US",
+                "userProfile": {"priceAffinity": 215},
             },
-        ) as res:
-            res.raise_for_status()
-            return await res.json()
+            "settings": {"useFuzzySearch": True, "didYouMean": {}},
+            "sort": {},
+        },
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+        },
+    ) as res:
+        res.raise_for_status()
+        return await res.json()
 
 
 def _find_match(name: str, search_results: dict[str, Any]) -> dict[str, Any] | None:
