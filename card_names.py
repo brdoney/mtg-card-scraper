@@ -17,7 +17,7 @@ CARD_NAME_PATH = CACHE_PATH / "card-names.json"
 def extract_names() -> list[str]:
     with open(CARD_BULK_PATH, "rb") as f:
         # for each object in the top-level array, read the "name" property
-        names: list[str] = list.copy(ijson.items(f, "item.name"))
+        names: list[str] = list(ijson.items(f, "item.name"))
     return names
 
 

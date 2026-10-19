@@ -12,6 +12,12 @@ _BROWSER_UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
 
+def _price(s: str) -> float | None:
+    try:
+        return float(s.replace(",", ""))
+    except ValueError:
+        return None
+
 
 class Product(NamedTuple):
     name: str
@@ -101,7 +107,7 @@ async def scrape_products(
                 continue
 
             stock = int(stock_tag.text.split()[0])
-            price = float(price_tag.text[1:])
+            price = _price(price_tag.text[1:]) or 0.0
 
             # pyrefly: ignore[bad-argument-type]
             dest = urlunparse(base_link._replace(path=dest_tag["href"]))

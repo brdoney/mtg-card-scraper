@@ -46,6 +46,7 @@ class BatchSelectApp(App):
         super().__init__(*args, **kwargs)
         self.cards = cards
         self.output_file = output_file
+        self.vendor_totals: dict[str, float] = {}
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -71,8 +72,8 @@ class BatchSelectApp(App):
     async def load_next_card(self) -> None:
         if self.current_index >= len(self.cards):
             self.status_label.update("All cards processed. Press q to exit.")
-            self.query_one(DataTable).clear(columns=True)
             self.query_one(CardDetails).data = None
+            self._show_vendor_totals()
             return
 
         card = self.cards[self.current_index]
@@ -118,6 +119,24 @@ class BatchSelectApp(App):
         self.status_label.update("Select one result with Enter or press S to skip.")
         table.focus()
 
+    def _show_vendor_totals(self) -> None:
+        table = self.query_one(DataTable)
+        table.clear(columns=True)
+        table.add_columns("vendor", "total")
+
+        if not self.vendor_totals:
+            self.prompt_label.update("No cards selected.")
+            return
+
+        for store, total in sorted(
+            self.vendor_totals.items(), key=lambda kv: kv[1], reverse=True
+        ):
+            table.add_row(store, f"${total:.2f}")
+
+        grand_total = sum(self.vendor_totals.values())
+        table.add_row("TOTAL", f"${grand_total:.2f}")
+        self.prompt_label.update("Vendor totals")
+
     def _append_line(self, original_line: str, url: str) -> None:
         self.output_file.parent.mkdir(parents=True, exist_ok=True)
         with self.output_file.open("a", encoding="utf-8") as f:
@@ -155,6 +174,10 @@ class BatchSelectApp(App):
 
         webbrowser.open(product.dest, autoraise=False)
         self._append_line(card, product.dest)
+
+        self.vendor_totals[product.store] = (
+            self.vendor_totals.get(product.store, 0.0) + product.price
+        )
 
         self.current_index += 1
         await self.load_next_card()
